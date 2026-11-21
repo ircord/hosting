@@ -2,6 +2,11 @@
 {{- $name := include "ircord.name" . -}}
 {{- $ergo := .Values.ergo -}}
 {{- $labels := include "ircord.labels" (dict "root" . "component" "ergo") }}
+{{- $moderation := and .Values.moderation.enabled (not $ergo.existingConfigMap) }}
+{{- $scripts := .Files.Get "files/ergo.sh" }}
+{{- if $moderation }}
+{{- $scripts = printf "%s%s" $scripts (.Files.Get "files/ergo-moderation.sh") }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -10,6 +15,10 @@ metadata:
 data:
   run.sh: |
     {{- .Files.Get "files/ergo.sh" | nindent 4 }}
+  {{- if $moderation }}
+  moderation.sh: |
+    {{- .Files.Get "files/ergo-moderation.sh" | nindent 4 }}
+  {{- end }}
   {{- if not $ergo.existingConfigMap }}
   ircd.yaml: |
     {{- include "ircord.ergoConfig" . | nindent 4 }}
@@ -29,7 +38,7 @@ spec:
     metadata:
       labels: {{- $labels | nindent 8 }}
       annotations:
-        checksum/config: {{ printf "%s%s" (.Files.Get "files/ergo.sh") (include "ircord.ergoConfig" .) | sha256sum | quote }}
+        checksum/config: {{ printf "%s%s" $scripts (include "ircord.ergoConfig" .) | sha256sum | quote }}
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
@@ -45,7 +54,7 @@ spec:
       containers:
         - name: ergo
           image: {{ include "ircord.image" $ergo.image | quote }}
-          command: [/bin/sh, /scripts/run.sh]
+          command: [/bin/sh, {{ ternary "/scripts/moderation.sh" "/scripts/run.sh" $moderation }}]
           securityContext: {{- include "ircord.security" . | nindent 12 }}
           ports:
             - {name: irc, containerPort: 6697}
@@ -56,6 +65,10 @@ spec:
                 secretKeyRef:
                   name: {{ required "ergo.apiTokenSecret is required when Ergo is enabled" $ergo.apiTokenSecret | quote }}
                   key: {{ $ergo.apiTokenKey | quote }}
+            {{- if $moderation }}
+            - name: ERGO_MODERATION_OPERATOR
+              value: {{ include "ircord.moderationOperator" . | quote }}
+            {{- end }}
           {{- with $ergo.envFrom }}
           envFrom: {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -78,11 +91,18 @@ spec:
             - {name: tls, mountPath: /tls, readOnly: true}
             - {name: data, mountPath: /ircd}
             - {name: tmp, mountPath: /tmp}
+            {{- if $moderation }}
+            - {name: moderation, mountPath: /etc/ircord/moderation, readOnly: true}
+            {{- end }}
       volumes:
         - name: scripts
           configMap:
             name: {{ $name }}-ergo
-            items: [{key: run.sh, path: run.sh}]
+            items:
+              - {key: run.sh, path: run.sh}
+              {{- if $moderation }}
+              - {key: moderation.sh, path: moderation.sh}
+              {{- end }}
         - name: config
           configMap:
             name: {{ default (printf "%s-ergo" $name) $ergo.existingConfigMap | quote }}
@@ -95,6 +115,9 @@ spec:
             claimName: {{ include "ircord.claimName" (dict "root" . "component" "ergo" "persistence" $ergo.persistence) }}
         - name: tmp
           emptyDir: {}
+        {{- if $moderation }}
+        {{- include "ircord.moderationVolume" . | nindent 8 }}
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service

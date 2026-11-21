@@ -18,6 +18,7 @@ jobs:
         with:
           version: v4.3.2
       - run: docker compose config --quiet
+      - run: docker compose -f compose.yaml -f compose.moderation.yaml config --quiet
       - run: helm lint --strict charts/ircord
       - run: helm lint --strict charts/ircord -f examples/full-values.yaml
       - name: Check the optional cache purge hook
@@ -35,4 +36,8 @@ jobs:
             --set infisical.hostAPI=https://secrets.example.com/api \
             --set infisical.projectSlug=example --set infisical.envSlug=prod \
             --set infisical.credentialsRef.secretName=infisical-auth
+      - name: Check server-owner moderation
+        run: |
+          helm lint --strict charts/ircord -f examples/full-values.yaml \
+            --set moderation.enabled=true --set moderation.existingSecret=ircord-moderation
       - run: helm package charts/ircord --destination "$RUNNER_TEMP"

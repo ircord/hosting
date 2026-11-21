@@ -58,3 +58,20 @@ imagePullSecrets:
   {{- toYaml . | nindent 2 }}
 {{- end }}
 {{- end -}}
+
+{{- define "ircord.moderationOperator" -}}
+{{- $operator := required "moderation.operator is required with moderation" .Values.moderation.operator -}}
+{{- if not (regexMatch "^[a-z0-9]+(-[a-z0-9]+)*$" $operator) -}}
+{{- fail "moderation.operator must use lowercase letters, digits, and single hyphens" -}}
+{{- end -}}
+{{- $operator -}}
+{{- end -}}
+
+{{- define "ircord.moderationVolume" -}}
+- name: moderation
+  secret:
+    secretName: {{ required "moderation.existingSecret is required with moderation" .Values.moderation.existingSecret | quote }}
+    defaultMode: 0440
+    items:
+      - {key: {{ .Values.moderation.passwordKey | quote }}, path: password}
+{{- end -}}
