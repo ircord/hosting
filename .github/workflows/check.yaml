@@ -24,4 +24,15 @@ jobs:
         run: |
           helm lint --strict charts/ircord -f examples/full-values.yaml \
             --set cachePurge.enabled=true --set cachePurge.existingSecret=example-cf
+      - name: Check Traefik, managed certificates, and secret sync
+        run: |
+          helm lint --strict charts/ircord -f examples/full-values.yaml \
+            --set ingress.driver=traefik --set ingress.app.directBackend=true \
+            --set ingress.certificates.issuerRef.name=example-issuer \
+            --set ingress.certificates.issuerRef.kind=ClusterIssuer \
+            --set 'ingress.website.aliases[0]=www.example.com' \
+            --set infisical.paths.app-secret=/applications/ircord \
+            --set infisical.hostAPI=https://secrets.example.com/api \
+            --set infisical.projectSlug=example --set infisical.envSlug=prod \
+            --set infisical.credentialsRef.secretName=infisical-auth
       - run: helm package charts/ircord --destination "$RUNNER_TEMP"

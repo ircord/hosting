@@ -15,6 +15,9 @@ backend:
   fileStorage: local
   env: {}
   envFrom: []
+  envRefs: []
+  annotations: {}
+  podLabels: {}
   extraVolumeMounts: []
   extraVolumes: []
   resources: {}
@@ -27,6 +30,9 @@ frontend:
     digest: ""
   env: {}
   envFrom: []
+  envRefs: []
+  annotations: {}
+  podLabels: {}
   resources: {}
 
 website:
@@ -39,14 +45,33 @@ website:
     digest: ""
   env: {}
   envFrom: []
+  envRefs: []
+  annotations: {}
+  podLabels: {}
   resources: {}
 
-# Each route is a standard Ingress. Add issuer annotations for cert-manager
-# or point tlsSecret at an existing certificate Secret.
 ingress:
-  app: {enabled: false, className: "", host: "", tlsSecret: "", annotations: {}}
-  website: {enabled: false, className: "", host: "", tlsSecret: "", annotations: {}}
-  media: {enabled: false, className: "", host: "", tlsSecret: "", annotations: {}}
+  driver: ingress
+  certificates:
+    issuerRef: {}
+    renewBefore: ""
+    privateKey: {}
+  traefik:
+    httpEntryPoint: web
+    httpsEntryPoint: websecure
+  app: {enabled: false, className: "", host: "", aliases: [], tlsSecret: "", annotations: {}, directBackend: false}
+  website: {enabled: false, className: "", host: "", aliases: [], tlsSecret: "", annotations: {}}
+  media: {enabled: false, className: "", host: "", aliases: [], tlsSecret: "", annotations: {}}
+
+# Optional secret sync via an installed Infisical operator. Paths map the name
+# of a Secret in the release namespace to an Infisical folder.
+infisical:
+  hostAPI: ""
+  resyncInterval: 60
+  projectSlug: ""
+  envSlug: ""
+  credentialsRef: {secretName: "", secretNamespace: ""}
+  paths: {}
 
 media:
   # disabled, external, or bundled. Bundled uses RustFS and a read-only gateway.
@@ -72,6 +97,7 @@ media:
   lifecycle:
     enabled: false
     schedule: "17 4 * * *"
+    timeZone: Etc/UTC
     days: 90
     expirationRuleID: ircord-linked-media-expiry
     deleteMarkerRuleID: ircord-linked-media-delete-markers

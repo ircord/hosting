@@ -57,6 +57,12 @@ three hosts, bundled media storage, and an associated Ergo server.
   to give it a separate host.
 - Each ingress accepts a class, annotations, and a TLS Secret name. Set the
   annotations required by your ingress controller or certificate issuer.
+- Add host aliases to a route with `ingress.<route>.aliases`. Set
+  `ingress.app.directBackend` to route HTTP API and WebSocket paths to the backend.
+- Set `ingress.certificates.issuerRef` to let the chart create cert-manager
+  certificates for the routes. Set each route's `tlsSecret` to name its Secret.
+- Set `ingress.driver=traefik` to use Traefik IngressRoutes and HTTP redirects.
+  This option requires the Traefik custom resource definitions.
 - Use `backend.trustedProxies` to trust only the frontend and your reverse proxy
   addresses. Configure your proxy to append the original client address.
 - Set an image repository and tag for each component. Set its optional
@@ -73,8 +79,11 @@ three hosts, bundled media storage, and an associated Ergo server.
 - The backend uses SQLite and requires exclusive access to its data directory.
   The chart runs one replica and recreates it during upgrades.
 - Set non-secret options in `backend.env` and `frontend.env`. Use `envFrom`
-  for Secrets and ConfigMaps. Use `backend.extraVolumes` and
+  for Secrets and ConfigMaps or `envRefs` for individual values. Use
+  `backend.extraVolumes` and
   `backend.extraVolumeMounts` for options that require files.
+- Set `infisical.paths` to let an installed Infisical operator populate Secrets.
+  Supply the API host, project, environment, and Universal Auth reference.
 - Back up the backend, RustFS, and Ergo volumes independently.
 
 ### Media CDN

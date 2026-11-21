@@ -186,6 +186,9 @@ metadata:
   name: {{ $name }}-media-lifecycle
 spec:
   schedule: {{ $media.lifecycle.schedule | quote }}
+  {{- with $media.lifecycle.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 2

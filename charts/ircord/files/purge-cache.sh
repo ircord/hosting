@@ -3,7 +3,7 @@ set -eu
 
 attempt=0
 while [ "$attempt" -lt 90 ]; do
-  status=$(kubectl -n "$POD_NAMESPACE" get deployment "$FRONTEND_DEPLOYMENT" -o json) || status=
+  status=$(kubectl -n "$POD_NAMESPACE" --cache-dir=/tmp/kubectl get deployment "$FRONTEND_DEPLOYMENT" -o json) || status=
   if [ -n "$status" ] && printf '%s\n' "$status" | jq -e --arg image "$EXPECTED_IMAGE" '
     .spec.replicas as $wanted |
     (.spec.template.spec.containers | any(.name == "frontend" and .image == $image)) and

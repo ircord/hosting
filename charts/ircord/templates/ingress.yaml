@@ -1,20 +1,112 @@
 {{- $root := . -}}
+{{- $name := include "ircord.name" . -}}
+{{- $ingress := .Values.ingress -}}
+{{- $traefik := eq $ingress.driver "traefik" -}}
+{{- if not (has $ingress.driver (list "ingress" "traefik")) }}
+{{- fail "ingress.driver must be ingress or traefik" }}
+{{- end }}
 {{- $routes := dict "app" (dict "component" "frontend" "port" 3000) "website" (dict "component" "website" "port" 8080) "media" (dict "component" "media" "port" 8080) -}}
-{{- range $name, $route := $routes }}
-{{- $config := index $root.Values.ingress $name }}
+{{- $prefixes := list "/api/v1" "/files" "/schemas" -}}
+{{- $exactPaths := list "/docs" "/openapi.json" "/openapi.yaml" -}}
+{{- if and $traefik (or $ingress.app.enabled $ingress.website.enabled $ingress.media.enabled) }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $name }}-https
+spec:
+  redirectScheme: {scheme: https, permanent: true}
+{{- end }}
+{{- range $routeName, $route := $routes }}
+{{- $config := index $ingress $routeName }}
 {{- if $config.enabled }}
-{{- if and (eq $name "website") (not $root.Values.website.enabled) }}
+{{- if and (eq $routeName "website") (not $root.Values.website.enabled) }}
 {{- fail "ingress.website.enabled requires website.enabled" }}
 {{- end }}
-{{- if and (eq $name "media") (ne $root.Values.media.mode "bundled") }}
+{{- if and (eq $routeName "media") (ne $root.Values.media.mode "bundled") }}
 {{- fail "ingress.media.enabled requires bundled media" }}
 {{- end }}
-{{- $host := required (printf "ingress.%s.host is required when enabled" $name) $config.host }}
+{{- $host := required (printf "ingress.%s.host is required when enabled" $routeName) $config.host }}
+{{- $hosts := concat (list $host) $config.aliases }}
+{{- $service := printf "%s-%s" $name $route.component }}
+{{- $directBackend := and (eq $routeName "app") $config.directBackend }}
+{{- if $ingress.certificates.issuerRef }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ required "ingress routes need tlsSecret when issuing certificates" $config.tlsSecret | quote }}
+spec:
+  secretName: {{ $config.tlsSecret | quote }}
+  dnsNames: {{- toYaml $hosts | nindent 4 }}
+  issuerRef: {{- toYaml $ingress.certificates.issuerRef | nindent 4 }}
+  {{- with $ingress.certificates.privateKey }}
+  privateKey: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $ingress.certificates.renewBefore }}
+  renewBefore: {{ . | quote }}
+  {{- end }}
+{{- end }}
+{{- if $traefik }}
+{{- $matches := list }}
+{{- range $hosts }}
+{{- $matches = append $matches (printf "Host(%q)" . | replace "\"" "`") }}
+{{- end }}
+{{- $hostMatch := printf "(%s)" (join " || " $matches) }}
+{{- $base := printf "%s-%s" $name $routeName }}
+{{- if eq $routeName "app" }}{{- $base = $name }}{{- end }}
+{{- if eq $routeName "media" }}{{- $base = printf "%s-cdn" $name }}{{- end }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $base }}-http
+  {{- with $config.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  entryPoints: [{{ $ingress.traefik.httpEntryPoint | quote }}]
+  routes:
+    - match: {{ $hostMatch | quote }}
+      kind: Rule
+      middlewares: [{name: {{ $name }}-https}]
+      services: [{name: {{ $service }}, port: {{ $route.port }}}]
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $base }}-https
+  {{- with $config.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  entryPoints: [{{ $ingress.traefik.httpsEntryPoint | quote }}]
+  tls:
+    secretName: {{ required "ingress routes need tlsSecret with the Traefik driver" $config.tlsSecret | quote }}
+  routes:
+    {{- if $directBackend }}
+    {{- $paths := list }}
+    {{- range $prefixes }}
+    {{- $paths = append $paths (printf "PathPrefix(%q)" (printf "%s/" .) | replace "\"" "`") }}
+    {{- end }}
+    {{- range $exactPaths }}
+    {{- $paths = append $paths (printf "Path(%q)" . | replace "\"" "`") }}
+    {{- end }}
+    - match: {{ printf "%s && (%s)" $hostMatch (join " || " $paths) | quote }}
+      kind: Rule
+      priority: 100
+      services: [{name: {{ $name }}-backend, port: 8080}]
+    {{- end }}
+    - match: {{ $hostMatch | quote }}
+      kind: Rule
+      priority: 10
+      services: [{name: {{ $service }}, port: {{ $route.port }}}]
+{{- else }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "ircord.name" $root }}-{{ $name }}
+  name: {{ $name }}-{{ $routeName }}
   {{- with $config.annotations }}
   annotations: {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -24,19 +116,33 @@ spec:
   {{- end }}
   {{- with $config.tlsSecret }}
   tls:
-    - hosts: [{{ $host | quote }}]
+    - hosts: {{- toYaml $hosts | nindent 8 }}
       secretName: {{ . | quote }}
   {{- end }}
   rules:
-    - host: {{ $host | quote }}
+    {{- range $hosts }}
+    - host: {{ . | quote }}
       http:
         paths:
+          {{- if $directBackend }}
+          {{- range $prefixes }}
+          - path: {{ . | quote }}
+            pathType: Prefix
+            backend:
+              service: {name: {{ $name }}-backend, port: {number: 8080}}
+          {{- end }}
+          {{- range $exactPaths }}
+          - path: {{ . | quote }}
+            pathType: Exact
+            backend:
+              service: {name: {{ $name }}-backend, port: {number: 8080}}
+          {{- end }}
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:
-              service:
-                name: {{ include "ircord.name" $root }}-{{ $route.component }}
-                port:
-                  number: {{ $route.port }}
+              service: {name: {{ $service }}, port: {number: {{ $route.port }}}}
+    {{- end }}
+{{- end }}
 {{- end }}
 {{- end }}

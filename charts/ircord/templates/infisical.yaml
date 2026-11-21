@@ -1,0 +1,26 @@
+{{- $root := . -}}
+{{- $config := .Values.infisical -}}
+{{- range $name, $path := $config.paths }}
+---
+apiVersion: secrets.infisical.com/v1alpha1
+kind: InfisicalSecret
+metadata:
+  name: {{ $name | quote }}
+spec:
+  hostAPI: {{ required "infisical.hostAPI is required when syncing secrets" $config.hostAPI | quote }}
+  resyncInterval: {{ $config.resyncInterval }}
+  authentication:
+    universalAuth:
+      secretsScope:
+        projectSlug: {{ required "infisical.projectSlug is required when syncing secrets" $config.projectSlug | quote }}
+        envSlug: {{ required "infisical.envSlug is required when syncing secrets" $config.envSlug | quote }}
+        secretsPath: {{ required "an Infisical path is required for each synced secret" $path | quote }}
+      credentialsRef:
+        secretName: {{ required "infisical.credentialsRef.secretName is required when syncing secrets" $config.credentialsRef.secretName | quote }}
+        secretNamespace: {{ default $root.Release.Namespace $config.credentialsRef.secretNamespace | quote }}
+  managedSecretReference:
+    secretName: {{ $name | quote }}
+    secretNamespace: {{ $root.Release.Namespace | quote }}
+    secretType: Opaque
+    creationPolicy: Owner
+{{- end }}

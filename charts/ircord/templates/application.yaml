@@ -33,6 +33,9 @@ kind: Deployment
 metadata:
   name: {{ $name }}-{{ $component }}
   labels: {{- $labels | nindent 4 }}
+  {{- with $app.values.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   replicas: {{ $app.replicas }}
   {{- if eq $component "backend" }}
@@ -43,7 +46,7 @@ spec:
     matchLabels: {{- $labels | nindent 6 }}
   template:
     metadata:
-      labels: {{- $labels | nindent 8 }}
+      labels: {{- merge (fromYaml $labels) $app.values.podLabels | toYaml | nindent 8 }}
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
@@ -65,7 +68,7 @@ spec:
             - name: http
               containerPort: {{ $app.port }}
           {{- $env := mergeOverwrite (deepCopy $app.env) $app.values.env }}
-          {{- if or $env (and (eq $component "backend") (ne $root.Values.media.mode "disabled")) }}
+          {{- if or $env $app.values.envRefs }}
           env:
             {{- range $key, $value := $env }}
             - name: {{ $key }}
@@ -89,6 +92,9 @@ spec:
                   name: {{ required "ergo.apiTokenSecret is required when Ergo is enabled" $root.Values.ergo.apiTokenSecret | quote }}
                   key: {{ $root.Values.ergo.apiTokenKey | quote }}
             {{- end }}
+            {{- end }}
+            {{- with $app.values.envRefs }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           {{- end }}
           {{- with $app.values.envFrom }}
