@@ -5,9 +5,9 @@ s3() {
   aws --endpoint-url "$S3_ENDPOINT" --cli-connect-timeout 5 --cli-read-timeout 25 s3api "$@"
 }
 
-rules=$(printf '[{"ID":"ircord-linked-media-expiry","Status":"Enabled","Filter":{"Prefix":"%s/link-media/"},"Expiration":{"Days":%s},"NoncurrentVersionExpiration":{"NoncurrentDays":1}},{"ID":"ircord-linked-media-delete-markers","Status":"Enabled","Filter":{"Prefix":"%s/link-media/"},"Expiration":{"ExpiredObjectDeleteMarker":true}}]' \
-  "$MEDIA_PREFIX" "$LIFECYCLE_DAYS" "$MEDIA_PREFIX")
-query="{Rules: [Rules[?ID != 'ircord-linked-media-expiry' && ID != 'ircord-linked-media-delete-markers'], \`$rules\`][]}"
+rules=$(printf '[{"ID":"%s","Status":"Enabled","Filter":{"Prefix":"%s/link-media/"},"Expiration":{"Days":%s},"NoncurrentVersionExpiration":{"NoncurrentDays":1}},{"ID":"%s","Status":"Enabled","Filter":{"Prefix":"%s/link-media/"},"Expiration":{"ExpiredObjectDeleteMarker":true}}]' \
+  "$EXPIRATION_RULE_ID" "$MEDIA_PREFIX" "$LIFECYCLE_DAYS" "$DELETE_MARKER_RULE_ID" "$MEDIA_PREFIX")
+query="{Rules: [Rules[?ID != '$EXPIRATION_RULE_ID' && ID != '$DELETE_MARKER_RULE_ID'], \`$rules\`][]}"
 
 if s3 get-bucket-lifecycle-configuration --bucket "$S3_BUCKET" --query "$query" --output json >/tmp/lifecycle.json 2>/tmp/lifecycle-error; then
   :

@@ -17,6 +17,11 @@
 {{- if and $media.lifecycle.enabled (lt (int $media.lifecycle.days) 1) }}
 {{- fail "media.lifecycle.days must be positive" }}
 {{- end }}
+{{- if $media.lifecycle.enabled }}
+{{- if or (not (regexMatch "^[A-Za-z0-9][A-Za-z0-9_-]*$" $media.lifecycle.expirationRuleID)) (not (regexMatch "^[A-Za-z0-9][A-Za-z0-9_-]*$" $media.lifecycle.deleteMarkerRuleID)) (eq $media.lifecycle.expirationRuleID $media.lifecycle.deleteMarkerRuleID) }}
+{{- fail "media lifecycle rule IDs must be distinct and contain only letters, numbers, hyphens, or underscores" }}
+{{- end }}
+{{- end }}
 {{- if eq $media.mode "bundled" }}
 {{- if $media.credentials.sessionTokenKey }}
 {{- fail "a session token is only supported with external media storage" }}

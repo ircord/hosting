@@ -58,6 +58,8 @@ spec:
         - {name: MEDIA_PREFIX, value: {{ $media.prefix | quote }}}
         - {name: MEDIA_LIFECYCLE, value: {{ $media.lifecycle.enabled | quote }}}
         - {name: LIFECYCLE_DAYS, value: {{ $media.lifecycle.days | quote }}}
+        - {name: EXPIRATION_RULE_ID, value: {{ $media.lifecycle.expirationRuleID | quote }}}
+        - {name: DELETE_MARKER_RULE_ID, value: {{ $media.lifecycle.deleteMarkerRuleID | quote }}}
         - {name: AWS_DEFAULT_REGION, value: {{ $media.region | quote }}}
         - {name: AWS_EC2_METADATA_DISABLED, value: "true"}
         - {name: AWS_PAGER, value: ""}

@@ -93,6 +93,7 @@ The gateway serves only hashed media paths with GET, HEAD, and OPTIONS. Keep
 the RustFS service internal. The chart manages the bundled bucket's public
 media policy. Enable `media.lifecycle.enabled` to expire linked-media objects
 after 90 days by default. The lifecycle job preserves unrelated bucket rules.
+Set the two lifecycle rule IDs to adopt existing IRCord rules during migration.
 To keep private hosted files in object storage, set `backend.fileStorage=s3`.
 Use a separate private bucket. Set `IRCORD_S3_ENDPOINT` (host and optional port),
 `IRCORD_S3_BUCKET`, and `IRCORD_S3_REGION` under `backend.env`. Supply

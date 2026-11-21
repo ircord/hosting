@@ -73,6 +73,8 @@ media:
     enabled: false
     schedule: "17 4 * * *"
     days: 90
+    expirationRuleID: ircord-linked-media-expiry
+    deleteMarkerRuleID: ircord-linked-media-delete-markers
 
 # Configure an external IRC server through backend.env and backend.envFrom.
 # Enable this section to run a compatible Ergo instance alongside IRCord.
