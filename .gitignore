@@ -2,3 +2,4 @@
 backend.env
 frontend.env
 *.tgz
+ergo-moderation-password

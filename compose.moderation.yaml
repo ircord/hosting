@@ -1,0 +1,14 @@
+# Turns on server-owner moderation. Add this file after compose.yaml, for
+# example with COMPOSE_FILE=compose.yaml:compose.moderation.yaml in .env.
+# The backend also needs an associated Ergo server with the matching operator.
+services:
+  backend:
+    environment:
+      IRCORD_ERGO_MODERATION_OPERATOR: ${IRCORD_ERGO_MODERATION_OPERATOR:-ircord-moderation}
+      IRCORD_ERGO_MODERATION_PASSWORD_FILE: /run/secrets/ergo-moderation-password
+    secrets:
+      - ergo-moderation-password
+
+secrets:
+  ergo-moderation-password:
+    file: ${IRCORD_ERGO_MODERATION_PASSWORD_PATH:-./ergo-moderation-password}

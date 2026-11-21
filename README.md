@@ -136,3 +136,74 @@ helm lint --strict ./charts/ircord
 helm lint --strict ./charts/ircord -f ./examples/full-values.yaml
 helm template ircord ./charts/ircord -f ./examples/full-values.yaml
 ```
+
+## Server-owner moderation
+
+Server owners can delete other people's messages and mark people as bots on
+the associated Ergo server. The backend does this through an Ergo operator
+login. Moderation stays off until you configure that operator.
+
+Generate a password without spaces, and the bcrypt hash Ergo expects. Run the
+same Ergo version as your server.
+
+```sh
+openssl rand -hex 32 > ergo-moderation-password
+docker run --rm -i --entrypoint /ircd-bin/ergo ghcr.io/ergochat/ergo:v2.19.1 \
+  genpasswd < ergo-moderation-password
+```
+
+Add the operator to the Ergo configuration. Use the printed hash as its
+password. The class needs exactly these capabilities: `history` and
+`nofakelag` to delete messages, and `samode` to mark bots.
+
+```yaml
+oper-classes:
+  ircord-moderation:
+    title: IRCord moderation
+    capabilities: [history, nofakelag, samode]
+opers:
+  ircord-moderation:
+    class: ircord-moderation
+    hidden: true
+    password: "$2a$04$..."
+```
+
+Moderation also requires an associated Ergo server with accounts enabled.
+After you enable moderation, the backend log reports that server-owner
+moderation is on.
+
+### With Docker Compose
+
+Compose does not run Ergo. Add the operator to your Ergo server and configure
+it in `backend.env`. Keep the password file next to `compose.yaml`, or set
+`IRCORD_ERGO_MODERATION_PASSWORD_PATH` to its path. The backend runs as user
+65532, so that user must be able to read the file. Add the moderation file
+in `.env` and recreate the backend:
+
+```sh
+chmod 0400 ergo-moderation-password
+sudo chown 65532:65532 ergo-moderation-password
+echo 'COMPOSE_FILE=compose.yaml:compose.moderation.yaml' >> .env
+docker compose up -d --wait
+```
+
+Set `IRCORD_ERGO_MODERATION_OPERATOR` in `.env` if your operator has
+another name.
+
+### With Helm
+
+Store the password in a Secret and enable moderation:
+
+```sh
+kubectl -n ircord create secret generic ircord-moderation \
+  --from-file=password=ergo-moderation-password
+helm upgrade ircord ./charts/ircord --namespace ircord --reuse-values \
+  --set moderation.enabled=true --set moderation.existingSecret=ircord-moderation
+```
+
+With the bundled Ergo configuration, the chart adds the operator and hashes
+the password when Ergo starts. You don't need to hash it. With
+`ergo.existingConfigMap` or an external Ergo server, add the operator entry
+yourself. `moderation.operator` sets the operator name. It uses lowercase
+letters, digits, and hyphens. After you change the password, restart the
+backend and Ergo.

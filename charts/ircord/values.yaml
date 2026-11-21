@@ -123,6 +123,16 @@ ergo:
   envFrom: []
   resources: {}
 
+# Server-owner moderation lets server owners delete other people's messages and
+# mark bots. The backend logs in to Ergo as this operator. Provide an existing
+# Secret holding the operator password. With the bundled Ergo configuration, the
+# chart adds the operator and hashes the password when Ergo starts.
+moderation:
+  enabled: false
+  operator: ircord-moderation
+  existingSecret: ""
+  passwordKey: password
+
 cachePurge:
   enabled: false
   hostname: ""

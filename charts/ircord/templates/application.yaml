@@ -20,6 +20,10 @@
 {{- $_ := set $backend "IRCORD_ERGO_API_CA_FILE" "/etc/ircord/ergo-ca/ca.crt" -}}
 {{- end }}
 {{- end }}
+{{- if .Values.moderation.enabled }}
+{{- $_ := set $backend "IRCORD_ERGO_MODERATION_OPERATOR" (include "ircord.moderationOperator" .) -}}
+{{- $_ := set $backend "IRCORD_ERGO_MODERATION_PASSWORD_FILE" "/etc/ircord/moderation/password" -}}
+{{- end }}
 {{- $frontend := dict "NUXT_BACKEND_URL" (printf "http://%s-backend:8080" $name) "NUXT_SITE_URL" .Values.publicUrl -}}
 {{- $apps := dict "backend" (dict "values" .Values.backend "env" $backend "uid" 65532 "port" 8080 "probe" "/healthz" "replicas" 1) "frontend" (dict "values" .Values.frontend "env" $frontend "uid" 1000 "port" 3000 "probe" "/" "replicas" .Values.frontend.replicas) -}}
 {{- if .Values.website.enabled }}
@@ -120,6 +124,9 @@ spec:
             {{- if and $root.Values.ergo.enabled $root.Values.ergo.caSecret }}
             - {name: ergo-ca, mountPath: /etc/ircord/ergo-ca, readOnly: true}
             {{- end }}
+            {{- if $root.Values.moderation.enabled }}
+            - {name: moderation, mountPath: /etc/ircord/moderation, readOnly: true}
+            {{- end }}
             {{- with $app.values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -137,6 +144,9 @@ spec:
             secretName: {{ $root.Values.ergo.caSecret | quote }}
             items:
               - {key: {{ $root.Values.ergo.caKey | quote }}, path: ca.crt}
+        {{- end }}
+        {{- if $root.Values.moderation.enabled }}
+        {{- include "ircord.moderationVolume" $root | nindent 8 }}
         {{- end }}
         {{- with $app.values.extraVolumes }}
         {{- toYaml . | nindent 8 }}

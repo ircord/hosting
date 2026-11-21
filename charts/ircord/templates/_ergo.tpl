@@ -90,6 +90,17 @@ limits:
   monitor-entries: 100
   whowas-entries: 100
   multiline: {max-bytes: 4096, max-lines: 100}
+{{- if .Values.moderation.enabled }}
+# Ergo starts with the hashed moderation password from the mounted Secret.
+oper-classes:
+  ircord-moderation:
+    title: IRCord moderation
+    capabilities: [history, nofakelag, samode]
+opers:
+  {{ include "ircord.moderationOperator" . }}:
+    class: ircord-moderation
+    hidden: true
+{{- end }}
 logging:
   - {method: stderr, level: info, type: "* -userinput -useroutput"}
 {{- end -}}
