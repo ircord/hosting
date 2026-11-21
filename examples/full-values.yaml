@@ -1,0 +1,34 @@
+publicUrl: https://chat.example.com
+
+website:
+  enabled: true
+
+ingress:
+  app:
+    enabled: true
+    host: chat.example.com
+    tlsSecret: chat-tls
+  website:
+    enabled: true
+    host: example.com
+    tlsSecret: website-tls
+  media:
+    enabled: true
+    host: media.example.com
+    tlsSecret: media-tls
+
+media:
+  mode: bundled
+  publicUrl: https://media.example.com
+  credentials:
+    existingSecret: ircord-media-credentials
+  lifecycle:
+    enabled: true
+
+ergo:
+  enabled: true
+  hostname: irc.example.com
+  tlsSecret: irc-tls
+  apiTokenSecret: ircord-ergo-api
+  service:
+    type: LoadBalancer

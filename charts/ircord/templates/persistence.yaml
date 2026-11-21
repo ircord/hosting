@@ -1,0 +1,29 @@
+{{- $root := . -}}
+{{- $stores := dict "backend" .Values.backend.persistence -}}
+{{- if eq .Values.media.mode "bundled" }}
+{{- $_ := set $stores "rustfs" .Values.media.rustfs.persistence -}}
+{{- end }}
+{{- if .Values.ergo.enabled }}
+{{- $_ := set $stores "ergo" .Values.ergo.persistence -}}
+{{- end }}
+{{- range $component, $store := $stores }}
+{{- if not $store.existingClaim }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "ircord.claimName" (dict "root" $root "component" $component "persistence" $store) }}
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "ircord.labels" (dict "root" $root "component" $component) | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if $store.storageClass }}
+  storageClassName: {{ $store.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $store.size | quote }}
+{{- end }}
+{{- end }}

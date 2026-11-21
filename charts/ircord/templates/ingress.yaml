@@ -1,0 +1,42 @@
+{{- $root := . -}}
+{{- $routes := dict "app" (dict "component" "frontend" "port" 3000) "website" (dict "component" "website" "port" 8080) "media" (dict "component" "media" "port" 8080) -}}
+{{- range $name, $route := $routes }}
+{{- $config := index $root.Values.ingress $name }}
+{{- if $config.enabled }}
+{{- if and (eq $name "website") (not $root.Values.website.enabled) }}
+{{- fail "ingress.website.enabled requires website.enabled" }}
+{{- end }}
+{{- if and (eq $name "media") (ne $root.Values.media.mode "bundled") }}
+{{- fail "ingress.media.enabled requires bundled media" }}
+{{- end }}
+{{- $host := required (printf "ingress.%s.host is required when enabled" $name) $config.host }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "ircord.name" $root }}-{{ $name }}
+  {{- with $config.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $config.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- with $config.tlsSecret }}
+  tls:
+    - hosts: [{{ $host | quote }}]
+      secretName: {{ . | quote }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "ircord.name" $root }}-{{ $route.component }}
+                port:
+                  number: {{ $route.port }}
+{{- end }}
+{{- end }}

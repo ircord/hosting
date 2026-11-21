@@ -1,0 +1,193 @@
+{{- $media := .Values.media -}}
+{{- $name := include "ircord.name" . -}}
+{{- if not (has $media.mode (list "disabled" "external" "bundled")) }}
+{{- fail "media.mode must be disabled, external, or bundled" }}
+{{- end }}
+{{- if and $media.lifecycle.enabled (eq $media.mode "disabled") }}
+{{- fail "media.lifecycle.enabled requires media storage" }}
+{{- end }}
+{{- if ne $media.mode "disabled" }}
+{{- if not (regexMatch "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$" $media.bucket) }}
+{{- fail "media.bucket must be a 3 to 63 character DNS label" }}
+{{- end }}
+{{- if not (regexMatch "^[a-z0-9][a-z0-9-]*$" $media.prefix) }}
+{{- fail "media.prefix must be a lowercase alphanumeric segment with optional hyphens" }}
+{{- end }}
+{{- end }}
+{{- if and $media.lifecycle.enabled (lt (int $media.lifecycle.days) 1) }}
+{{- fail "media.lifecycle.days must be positive" }}
+{{- end }}
+{{- if eq $media.mode "bundled" }}
+{{- if $media.credentials.sessionTokenKey }}
+{{- fail "a session token is only supported with external media storage" }}
+{{- end }}
+{{- $root := . -}}
+{{- range $component, $uid := dict "rustfs" 10001 "media" 101 }}
+{{- $rustfs := eq $component "rustfs" }}
+{{- $labels := include "ircord.labels" (dict "root" $root "component" $component) }}
+{{- $port := ternary 9000 8080 $rustfs }}
+{{- $config := ternary $media.rustfs $media.gateway $rustfs }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-{{ $component }}
+  labels: {{- $labels | nindent 4 }}
+spec:
+  replicas: 1
+  {{- if $rustfs }}
+  strategy: {type: Recreate}
+  {{- end }}
+  selector:
+    matchLabels: {{- $labels | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- $labels | nindent 8 }}
+      {{- if not $rustfs }}
+      annotations:
+        checksum/config: {{ include "ircord.mediaGatewayConfig" $root | sha256sum | quote }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "ircord.pullSecrets" $root | nindent 6 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $uid }}
+        runAsGroup: {{ $uid }}
+        fsGroup: {{ $uid }}
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: {{ $component }}
+          image: {{ include "ircord.image" $config.image | quote }}
+          securityContext: {{- include "ircord.security" $root | nindent 12 }}
+          ports:
+            - {name: http, containerPort: {{ $port }}}
+          {{- if $rustfs }}
+          args: [/data]
+          env:
+            - {name: RUSTFS_ADDRESS, value: "0.0.0.0:9000"}
+            - {name: RUSTFS_CONSOLE_ENABLE, value: "false"}
+            - {name: RUSTFS_OBS_LOGGER_LEVEL, value: warn}
+            {{- include "ircord.mediaCredentials" (dict "root" $root "accessEnv" "RUSTFS_ACCESS_KEY" "secretEnv" "RUSTFS_SECRET_KEY") | nindent 12 }}
+          {{- else }}
+          command: [nginx, -g, "daemon off;"]
+          {{- end }}
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 15
+          {{- with $config.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            {{- if $rustfs }}
+            - {name: data, mountPath: /data}
+            - {name: logs, mountPath: /logs}
+            {{- else }}
+            - {name: config, mountPath: /etc/nginx/conf.d/default.conf, subPath: default.conf, readOnly: true}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if $rustfs }}
+        - name: logs
+          emptyDir: {}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "ircord.claimName" (dict "root" $root "component" $component "persistence" $media.rustfs.persistence) }}
+        {{- else }}
+        - name: config
+          configMap:
+            name: {{ $name }}-media-gateway
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-{{ $component }}
+  labels: {{- $labels | nindent 4 }}
+spec:
+  selector: {{- $labels | nindent 4 }}
+  ports:
+    - {name: http, port: {{ $port }}, targetPort: http}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-rustfs
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "ircord.labels" (dict "root" . "component" "rustfs") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name | quote }}
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [backend, media, media-bootstrap, media-lifecycle]
+      ports:
+        - {port: 9000, protocol: TCP}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-media-gateway
+data:
+  default.conf: |
+    {{- include "ircord.mediaGatewayConfig" . | nindent 4 }}
+{{- end }}
+{{- if or (eq $media.mode "bundled") $media.lifecycle.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-media-tools
+data:
+  media-bootstrap.sh: |
+    {{- .Files.Get "files/media-bootstrap.sh" | nindent 4 }}
+  media-lifecycle.sh: |
+    {{- .Files.Get "files/media-lifecycle.sh" | nindent 4 }}
+{{- end }}
+{{- if eq $media.mode "bundled" }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}-media-init-{{ .Release.Revision }}
+spec:
+  activeDeadlineSeconds: 360
+  backoffLimit: 3
+  template: {{- include "ircord.mediaToolPod" (dict "root" . "task" "bootstrap") | nindent 4 }}
+{{- end }}
+{{- if $media.lifecycle.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $name }}-media-lifecycle
+spec:
+  schedule: {{ $media.lifecycle.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 180
+      backoffLimit: 2
+      template:
+        {{- include "ircord.mediaToolPod" (dict "root" . "task" "lifecycle") | nindent 8 }}
+{{- end }}

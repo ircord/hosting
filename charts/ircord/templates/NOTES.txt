@@ -1,0 +1,8 @@
+IRCord is installed in namespace {{ .Release.Namespace }}.
+{{ if .Values.ingress.app.enabled -}}
+Open {{ .Values.publicUrl }}.
+{{ else -}}
+Forward the frontend Service to reach the app:
+  kubectl -n {{ .Release.Namespace }} port-forward service/{{ include "ircord.name" . }}-frontend 3000:3000
+Open {{ .Values.publicUrl }}.
+{{ end -}}

@@ -1,0 +1,8 @@
+apiVersion: v2
+name: ircord
+description: Self-hosted IRCord client, backend, and optional hosting services.
+type: application
+version: 0.1.0
+home: https://ircord.com
+sources:
+  - https://github.com/ircord/hosting

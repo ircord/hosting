@@ -1,0 +1,27 @@
+name: Validate hosting
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: v4.3.2
+      - run: docker compose config --quiet
+      - run: helm lint --strict charts/ircord
+      - run: helm lint --strict charts/ircord -f examples/full-values.yaml
+      - name: Check the optional cache purge hook
+        run: |
+          helm lint --strict charts/ircord -f examples/full-values.yaml \
+            --set cachePurge.enabled=true --set cachePurge.existingSecret=example-cf
+      - run: helm package charts/ircord --destination "$RUNNER_TEMP"

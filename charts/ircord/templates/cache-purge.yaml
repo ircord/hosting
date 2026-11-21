@@ -1,0 +1,85 @@
+{{- if .Values.cachePurge.enabled }}
+{{- $name := include "ircord.name" . -}}
+{{- $purge := .Values.cachePurge -}}
+{{- $hostname := required "cachePurge.hostname or ingress.app.host is required for cache purge" (default .Values.ingress.app.host $purge.hostname) }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}-cache-purge
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}-cache-purge
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [{{ $name }}-frontend]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}-cache-purge
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}-cache-purge
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}-cache-purge
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}-cache-purge
+  annotations:
+    helm.sh/hook: post-install,post-upgrade,post-rollback
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  activeDeadlineSeconds: 480
+  backoffLimit: 1
+  template:
+    spec:
+      serviceAccountName: {{ $name }}-cache-purge
+      restartPolicy: Never
+      enableServiceLinks: false
+      {{- include "ircord.pullSecrets" . | nindent 6 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: purge
+          image: {{ include "ircord.image" $purge.image | quote }}
+          securityContext: {{- include "ircord.security" . | nindent 12 }}
+          command: [/bin/sh, -c]
+          args:
+            - |
+              {{- .Files.Get "files/purge-cache.sh" | nindent 14 }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef: {fieldPath: metadata.namespace}
+            - {name: FRONTEND_DEPLOYMENT, value: {{ printf "%s-frontend" $name | quote }}}
+            - {name: FRONTEND_URL, value: {{ printf "http://%s-frontend:3000" $name | quote }}}
+            - {name: EXPECTED_IMAGE, value: {{ include "ircord.image" .Values.frontend.image | quote }}}
+            - {name: PURGE_HOSTNAME, value: {{ $hostname | quote }}}
+            - name: CLOUDFLARE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "cachePurge.existingSecret is required for cache purge" $purge.existingSecret | quote }}
+                  key: {{ $purge.tokenKey | quote }}
+            - name: CLOUDFLARE_ZONE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $purge.existingSecret | quote }}
+                  key: {{ $purge.zoneKey | quote }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {}}
+{{- end }}

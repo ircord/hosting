@@ -1,0 +1,149 @@
+{{- $root := . -}}
+{{- $name := include "ircord.name" . -}}
+{{- $backend := dict "IRCORD_DATA_DIR" "/data" "IRCORD_LISTEN" "0.0.0.0:8080" "IRCORD_PUBLIC_URL" .Values.publicUrl "IRCORD_ALLOWED_ORIGINS" .Values.publicUrl "IRCORD_TRUSTED_PROXIES" .Values.backend.trustedProxies "IRCORD_FILE_STORAGE" .Values.backend.fileStorage -}}
+{{- if ne .Values.media.mode "disabled" }}
+{{- $_ := set $backend "IRCORD_CDN_ENDPOINT" (include "ircord.mediaEndpoint" .) -}}
+{{- $_ := set $backend "IRCORD_CDN_PUBLIC_URL" (required "media.publicUrl is required with media storage" .Values.media.publicUrl) -}}
+{{- $_ := set $backend "IRCORD_CDN_BUCKET" .Values.media.bucket -}}
+{{- $_ := set $backend "IRCORD_CDN_PREFIX" .Values.media.prefix -}}
+{{- $_ := set $backend "IRCORD_CDN_REGION" .Values.media.region -}}
+{{- end }}
+{{- if not (has .Values.backend.fileStorage (list "local" "s3" "disabled")) }}
+{{- fail "backend.fileStorage must be local, s3, or disabled" }}
+{{- end }}
+{{- if .Values.ergo.enabled }}
+{{- $_ := set $backend "IRCORD_ERGO_SERVER" (printf "%s:%v" (required "ergo.hostname is required when Ergo is enabled" .Values.ergo.hostname) .Values.ergo.service.port) -}}
+{{- $_ := set $backend "IRCORD_ERGO_API_URL" (printf "https://%s-ergo-api:8089" $name) -}}
+{{- $_ := set $backend "IRCORD_ERGO_API_TLS_SERVER_NAME" .Values.ergo.hostname -}}
+{{- if .Values.ergo.caSecret }}
+{{- $_ := set $backend "IRCORD_IRC_CA_FILE" "/etc/ircord/ergo-ca/ca.crt" -}}
+{{- $_ := set $backend "IRCORD_ERGO_API_CA_FILE" "/etc/ircord/ergo-ca/ca.crt" -}}
+{{- end }}
+{{- end }}
+{{- $frontend := dict "NUXT_BACKEND_URL" (printf "http://%s-backend:8080" $name) "NUXT_SITE_URL" .Values.publicUrl -}}
+{{- $apps := dict "backend" (dict "values" .Values.backend "env" $backend "uid" 65532 "port" 8080 "probe" "/healthz" "replicas" 1) "frontend" (dict "values" .Values.frontend "env" $frontend "uid" 1000 "port" 3000 "probe" "/" "replicas" .Values.frontend.replicas) -}}
+{{- if .Values.website.enabled }}
+{{- $_ := set $apps "website" (dict "values" .Values.website "env" (dict) "uid" 101 "port" 8080 "probe" "/" "replicas" .Values.website.replicas) -}}
+{{- end }}
+{{- range $component, $app := $apps }}
+{{- $labels := include "ircord.labels" (dict "root" $root "component" $component) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-{{ $component }}
+  labels: {{- $labels | nindent 4 }}
+spec:
+  replicas: {{ $app.replicas }}
+  {{- if eq $component "backend" }}
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels: {{- $labels | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- $labels | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "ircord.pullSecrets" $root | nindent 6 }}
+      terminationGracePeriodSeconds: {{ ternary 45 30 (eq $component "backend") }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $app.uid }}
+        runAsGroup: {{ $app.uid }}
+        fsGroup: {{ $app.uid }}
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ $component }}
+          image: {{ include "ircord.image" $app.values.image | quote }}
+          securityContext: {{- include "ircord.security" $root | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ $app.port }}
+          {{- $env := mergeOverwrite (deepCopy $app.env) $app.values.env }}
+          {{- if or $env (and (eq $component "backend") (ne $root.Values.media.mode "disabled")) }}
+          env:
+            {{- range $key, $value := $env }}
+            - name: {{ $key }}
+              value: {{ $value | toString | quote }}
+            {{- end }}
+            {{- if eq $component "backend" }}
+            {{- if ne $root.Values.media.mode "disabled" }}
+            {{- include "ircord.mediaCredentials" (dict "root" $root "accessEnv" "IRCORD_CDN_ACCESS_KEY" "secretEnv" "IRCORD_CDN_SECRET_KEY") | nindent 12 }}
+            {{- with $root.Values.media.credentials.sessionTokenKey }}
+            - name: IRCORD_CDN_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.media.credentials.existingSecret | quote }}
+                  key: {{ . | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if $root.Values.ergo.enabled }}
+            - name: IRCORD_ERGO_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "ergo.apiTokenSecret is required when Ergo is enabled" $root.Values.ergo.apiTokenSecret | quote }}
+                  key: {{ $root.Values.ergo.apiTokenKey | quote }}
+            {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- with $app.values.envFrom }}
+          envFrom: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          startupProbe:
+            httpGet: {path: {{ $app.probe | quote }}, port: http}
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: {{ $app.probe | quote }}, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 15
+          {{- with $app.values.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            {{- if eq $component "backend" }}
+            - {name: data, mountPath: /data}
+            {{- if and $root.Values.ergo.enabled $root.Values.ergo.caSecret }}
+            - {name: ergo-ca, mountPath: /etc/ircord/ergo-ca, readOnly: true}
+            {{- end }}
+            {{- with $app.values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if eq $component "backend" }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "ircord.claimName" (dict "root" $root "component" "backend" "persistence" $app.values.persistence) }}
+        {{- if and $root.Values.ergo.enabled $root.Values.ergo.caSecret }}
+        - name: ergo-ca
+          secret:
+            secretName: {{ $root.Values.ergo.caSecret | quote }}
+            items:
+              - {key: {{ $root.Values.ergo.caKey | quote }}, path: ca.crt}
+        {{- end }}
+        {{- with $app.values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-{{ $component }}
+  labels: {{- $labels | nindent 4 }}
+spec:
+  selector: {{- $labels | nindent 4 }}
+  ports:
+    - {name: http, port: {{ $app.port }}, targetPort: http}
+{{- end }}

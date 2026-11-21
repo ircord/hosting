@@ -1,0 +1,138 @@
+{{- if .Values.ergo.enabled }}
+{{- $name := include "ircord.name" . -}}
+{{- $ergo := .Values.ergo -}}
+{{- $labels := include "ircord.labels" (dict "root" . "component" "ergo") }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-ergo
+data:
+  run.sh: |
+    {{- .Files.Get "files/ergo.sh" | nindent 4 }}
+  {{- if not $ergo.existingConfigMap }}
+  ircd.yaml: |
+    {{- include "ircord.ergoConfig" . | nindent 4 }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-ergo
+  labels: {{- $labels | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {{- $labels | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- $labels | nindent 8 }}
+      annotations:
+        checksum/config: {{ printf "%s%s" (.Files.Get "files/ergo.sh") (include "ircord.ergoConfig" .) | sha256sum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "ircord.pullSecrets" . | nindent 6 }}
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: ergo
+          image: {{ include "ircord.image" $ergo.image | quote }}
+          command: [/bin/sh, /scripts/run.sh]
+          securityContext: {{- include "ircord.security" . | nindent 12 }}
+          ports:
+            - {name: irc, containerPort: 6697}
+            - {name: api, containerPort: 8089}
+          env:
+            - name: ERGO_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "ergo.apiTokenSecret is required when Ergo is enabled" $ergo.apiTokenSecret | quote }}
+                  key: {{ $ergo.apiTokenKey | quote }}
+          {{- with $ergo.envFrom }}
+          envFrom: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          startupProbe:
+            tcpSocket: {port: irc}
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket: {port: irc}
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: irc}
+            periodSeconds: 15
+          {{- with $ergo.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - {name: scripts, mountPath: /scripts, readOnly: true}
+            - {name: config, mountPath: /etc/ergo, readOnly: true}
+            - {name: tls, mountPath: /tls, readOnly: true}
+            - {name: data, mountPath: /ircd}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ $name }}-ergo
+            items: [{key: run.sh, path: run.sh}]
+        - name: config
+          configMap:
+            name: {{ default (printf "%s-ergo" $name) $ergo.existingConfigMap | quote }}
+        - name: tls
+          secret:
+            secretName: {{ required "ergo.tlsSecret is required when Ergo is enabled" $ergo.tlsSecret | quote }}
+            defaultMode: 0440
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "ircord.claimName" (dict "root" . "component" "ergo" "persistence" $ergo.persistence) }}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-ergo
+  {{- with $ergo.service.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $ergo.service.type }}
+  selector: {{- $labels | nindent 4 }}
+  ports:
+    - {name: irc, port: {{ $ergo.service.port }}, targetPort: irc}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-ergo-api
+spec:
+  selector: {{- $labels | nindent 4 }}
+  ports:
+    - {name: api, port: 8089, targetPort: api}
+{{- if $ergo.apiNetworkPolicy }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-ergo-api
+spec:
+  podSelector:
+    matchLabels: {{- $labels | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports: [{port: 6697, protocol: TCP}]
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "ircord.labels" (dict "root" . "component" "backend") | nindent 14 }}
+      ports: [{port: 8089, protocol: TCP}]
+{{- end }}
+{{- end }}

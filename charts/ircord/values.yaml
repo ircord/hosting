@@ -1,0 +1,104 @@
+publicUrl: http://localhost:3000
+imagePullSecrets: []
+
+# Use one backend replica with an exclusive persistent volume.
+backend:
+  image:
+    repository: ghcr.io/ircord/ircord-backend
+    tag: v0.7.4
+    digest: ""
+  persistence:
+    existingClaim: ""
+    storageClass: ""
+    size: 10Gi
+  trustedProxies: ""
+  fileStorage: local
+  env: {}
+  envFrom: []
+  extraVolumeMounts: []
+  extraVolumes: []
+  resources: {}
+
+frontend:
+  replicas: 1
+  image:
+    repository: ghcr.io/ircord/ircord-frontend
+    tag: v0.7.3
+    digest: ""
+  env: {}
+  envFrom: []
+  resources: {}
+
+website:
+  enabled: false
+  replicas: 1
+  # The existing website release includes its own static changelog.
+  image:
+    repository: ghcr.io/karbowiak/ircord-website
+    tag: v0.7.2
+    digest: ""
+  env: {}
+  envFrom: []
+  resources: {}
+
+# Each route is a standard Ingress. Add issuer annotations for cert-manager
+# or point tlsSecret at an existing certificate Secret.
+ingress:
+  app: {enabled: false, className: "", host: "", tlsSecret: "", annotations: {}}
+  website: {enabled: false, className: "", host: "", tlsSecret: "", annotations: {}}
+  media: {enabled: false, className: "", host: "", tlsSecret: "", annotations: {}}
+
+media:
+  # disabled, external, or bundled. Bundled uses RustFS and a read-only gateway.
+  mode: disabled
+  endpoint: ""
+  publicUrl: ""
+  bucket: ircord-media
+  prefix: media
+  region: us-east-1
+  credentials:
+    existingSecret: ""
+    accessKey: access-key
+    secretKey: secret-key
+    sessionTokenKey: ""
+  rustfs:
+    image: {repository: rustfs/rustfs, tag: "1.0.4", digest: ""}
+    persistence: {existingClaim: "", storageClass: "", size: 50Gi}
+    resources: {}
+  gateway:
+    image: {repository: nginxinc/nginx-unprivileged, tag: "1.30-alpine", digest: ""}
+    resources: {}
+  toolingImage: {repository: public.ecr.aws/aws-cli/aws-cli, tag: "2.39.6", digest: ""}
+  lifecycle:
+    enabled: false
+    schedule: "17 4 * * *"
+    days: 90
+
+# Configure an external IRC server through backend.env and backend.envFrom.
+# Enable this section to run a compatible Ergo instance alongside IRCord.
+ergo:
+  enabled: false
+  hostname: ""
+  image: {repository: ghcr.io/ergochat/ergo, tag: v2.19.1, digest: ""}
+  persistence: {existingClaim: "", storageClass: "", size: 10Gi}
+  tlsSecret: ""
+  caSecret: ""
+  caKey: ca.crt
+  existingConfigMap: ""
+  apiTokenSecret: ""
+  apiTokenKey: api-token
+  service:
+    type: ClusterIP
+    port: 6697
+    annotations: {}
+  apiNetworkPolicy: true
+  envFrom: []
+  resources: {}
+
+cachePurge:
+  enabled: false
+  hostname: ""
+  existingSecret: ""
+  tokenKey: api-token
+  zoneKey: zone-id
+  image: {repository: alpine/k8s, tag: "1.37.2", digest: ""}

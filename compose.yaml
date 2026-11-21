@@ -1,0 +1,60 @@
+services:
+  backend:
+    image: ${IRCORD_BACKEND_IMAGE:-ghcr.io/ircord/ircord-backend:v0.7.4}
+    restart: unless-stopped
+    env_file:
+      - path: ./backend.env
+        required: false
+    environment:
+      IRCORD_PUBLIC_URL: ${IRCORD_PUBLIC_URL:-http://localhost:3000}
+      IRCORD_ALLOWED_ORIGINS: ${IRCORD_PUBLIC_URL:-http://localhost:3000}
+      IRCORD_TRUSTED_PROXIES: ${IRCORD_TRUSTED_PROXIES:-${IRCORD_NETWORK_SUBNET:-172.30.80.0/28}}
+      IRCORD_DATA_DIR: /data
+      IRCORD_LISTEN: 0.0.0.0:8080
+    volumes:
+      - backend-data:/data
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    stop_grace_period: 45s
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:8080/healthz']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [application]
+
+  frontend:
+    image: ${IRCORD_FRONTEND_IMAGE:-ghcr.io/ircord/ircord-frontend:v0.7.3}
+    restart: unless-stopped
+    env_file:
+      - path: ./frontend.env
+        required: false
+    environment:
+      NUXT_BACKEND_URL: http://backend:8080
+      NUXT_SITE_URL: ${IRCORD_PUBLIC_URL:-http://localhost:3000}
+    ports:
+      - "${IRCORD_BIND_ADDRESS:-127.0.0.1}:${IRCORD_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:3000/']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [application]
+
+networks:
+  application:
+    ipam:
+      config:
+        - subnet: ${IRCORD_NETWORK_SUBNET:-172.30.80.0/28}
+
+volumes:
+  backend-data:
