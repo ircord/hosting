@@ -174,8 +174,8 @@ moderation is on.
 
 ### With Docker Compose
 
-Compose does not run Ergo. Add the operator to your Ergo server and configure
-it in `backend.env`. Keep the password file next to `compose.yaml`, or set
+Compose does not run Ergo. Add the operator to your Ergo server, and point the
+backend at that server in `backend.env`. Keep the password file next to `compose.yaml`, or set
 `IRCORD_ERGO_MODERATION_PASSWORD_PATH` to its path. The backend runs as user
 65532, so that user must be able to read the file. Add the moderation file
 in `.env` and recreate the backend:
