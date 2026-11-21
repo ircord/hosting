@@ -152,6 +152,7 @@ To enable rooms, list their lowercase channel names in `voice.channels`.
 Set `voice.media.enabled` and set `voice.media.address` to the IP clients can reach on UDP port 7882.
 Forward that port to the media load balancer if your router uses network address translation.
 Clients use the existing IRCord HTTPS host for signaling and WebRTC for audio.
+Exclude signaling query strings from reverse proxy logs because they contain room credentials.
 
 With Compose, put the same key and secret in `backend.env` using the names above.
 Set `IRCORD_VOICE_URL=http://livekit:7880` and set `IRCORD_VOICE_CHANNELS` to a comma-separated list.

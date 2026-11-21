@@ -89,6 +89,7 @@ spec:
     - match: {{ printf "%s && PathPrefix(`/voice/rtc`)" $hostMatch | quote }}
       kind: Rule
       priority: 100
+      observability: {accessLogs: false, tracing: false}
       services: [{name: {{ $name }}-backend, port: 8080}]
     {{- end }}
     {{- if $directBackend }}
