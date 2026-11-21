@@ -1,0 +1,114 @@
+{{- if .Values.voice.enabled }}
+{{- $voice := .Values.voice -}}
+{{- $name := include "ircord.name" . -}}
+{{- $labels := include "ircord.labels" (dict "root" . "component" "livekit") -}}
+{{- $backend := include "ircord.labels" (dict "root" . "component" "backend") -}}
+{{- if and $voice.channels (not $voice.media.enabled) -}}
+{{- fail "voice channels require voice.media.enabled" -}}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-livekit
+  labels: {{- $labels | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {{- $labels | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- $labels | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: livekit
+          image: {{ include "ircord.image" $voice.image | quote }}
+          securityContext: {{- include "ircord.security" . | nindent 12 }}
+          ports:
+            - {name: control, containerPort: 7880}
+            - {name: rtc, containerPort: 7882, protocol: UDP}
+          env:
+            {{- include "ircord.voiceCredentials" . | nindent 12 }}
+            - name: LIVEKIT_KEYS
+              value: '$(IRCORD_VOICE_API_KEY): $(IRCORD_VOICE_API_SECRET)'
+            - name: LIVEKIT_CONFIG
+              value: |
+                port: 7880
+                rtc:
+                  udp_port: 7882
+                  tcp_port: 0
+                  use_external_ip: false
+                  {{- if $voice.media.enabled }}
+                  node_ip: {{ required "voice.media.address is required when publishing media" $voice.media.address | quote }}
+                  {{- end }}
+                room:
+                  max_participants: 8
+                logging:
+                  level: warn
+          readinessProbe:
+            httpGet: {path: /, port: control}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /, port: control}
+            periodSeconds: 15
+          {{- with $voice.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-livekit
+  labels: {{- $labels | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: {{- $labels | nindent 4 }}
+  ports:
+    - {name: control, port: 7880, targetPort: control}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-livekit
+spec:
+  podSelector:
+    matchLabels: {{- $labels | nindent 6 }}
+  policyTypes:
+    - Ingress
+    {{- if not $voice.media.enabled }}
+    - Egress
+  egress: []
+    {{- end }}
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {{- $backend | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 7880}
+    {{- if $voice.media.enabled }}
+    - ports:
+        - {protocol: UDP, port: 7882}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-livekit-rtc
+  labels: {{- $labels | nindent 4 }}
+  {{- with $voice.media.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector: {{- $labels | nindent 4 }}
+  ports:
+    - {name: rtc, port: 7882, targetPort: rtc, protocol: UDP}
+    {{- end }}
+{{- end }}

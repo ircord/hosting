@@ -24,6 +24,10 @@
 {{- $_ := set $backend "IRCORD_ERGO_MODERATION_OPERATOR" (include "ircord.moderationOperator" .) -}}
 {{- $_ := set $backend "IRCORD_ERGO_MODERATION_PASSWORD_FILE" "/etc/ircord/moderation/password" -}}
 {{- end }}
+{{- if and .Values.voice.enabled .Values.voice.channels }}
+{{- $_ := set $backend "IRCORD_VOICE_URL" (printf "http://%s-livekit:7880" $name) -}}
+{{- $_ := set $backend "IRCORD_VOICE_CHANNELS" (join "," .Values.voice.channels) -}}
+{{- end }}
 {{- $frontend := dict "NUXT_BACKEND_URL" (printf "http://%s-backend:8080" $name) "NUXT_SITE_URL" .Values.publicUrl -}}
 {{- $apps := dict "backend" (dict "values" .Values.backend "env" $backend "uid" 65532 "port" 8080 "probe" "/healthz" "replicas" 1) "frontend" (dict "values" .Values.frontend "env" $frontend "uid" 1000 "port" 3000 "probe" "/" "replicas" .Values.frontend.replicas) -}}
 {{- if .Values.website.enabled }}
@@ -79,6 +83,9 @@ spec:
               value: {{ $value | toString | quote }}
             {{- end }}
             {{- if eq $component "backend" }}
+            {{- if and $root.Values.voice.enabled $root.Values.voice.channels }}
+            {{- include "ircord.voiceCredentials" $root | nindent 12 }}
+            {{- end }}
             {{- if ne $root.Values.media.mode "disabled" }}
             {{- include "ircord.mediaCredentials" (dict "root" $root "accessEnv" "IRCORD_CDN_ACCESS_KEY" "secretEnv" "IRCORD_CDN_SECRET_KEY") | nindent 12 }}
             {{- with $root.Values.media.credentials.sessionTokenKey }}

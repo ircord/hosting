@@ -133,6 +133,25 @@ moderation:
   existingSecret: ""
   passwordKey: password
 
+# The control and signaling port always stays on the private cluster network.
+voice:
+  enabled: false
+  channels: []
+  image:
+    repository: livekit/livekit-server
+    tag: v1.13.11
+    digest: sha256:25cd902de7cacbd5f1f779f6a6ac1eae20ba8f56b0935934ce6b0ab80d1e3d20
+  credentials:
+    existingSecret: ""
+    apiKey: IRCORD_VOICE_API_KEY
+    secretKey: IRCORD_VOICE_API_SECRET
+  media:
+    enabled: false
+    # Address clients can reach on UDP 7882. Use the router or load balancer address.
+    address: ""
+    annotations: {}
+  resources: {}
+
 cachePurge:
   enabled: false
   hostname: ""

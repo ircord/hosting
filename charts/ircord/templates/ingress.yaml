@@ -30,6 +30,7 @@ spec:
 {{- $hosts := concat (list $host) $config.aliases }}
 {{- $service := printf "%s-%s" $name $route.component }}
 {{- $directBackend := and (eq $routeName "app") $config.directBackend }}
+{{- $voice := and (eq $routeName "app") $root.Values.voice.enabled $root.Values.voice.channels }}
 {{- if $ingress.certificates.issuerRef }}
 ---
 apiVersion: cert-manager.io/v1
@@ -84,6 +85,12 @@ spec:
   tls:
     secretName: {{ required "ingress routes need tlsSecret with the Traefik driver" $config.tlsSecret | quote }}
   routes:
+    {{- if $voice }}
+    - match: {{ printf "%s && PathPrefix(`/voice/rtc`)" $hostMatch | quote }}
+      kind: Rule
+      priority: 100
+      services: [{name: {{ $name }}-backend, port: 8080}]
+    {{- end }}
     {{- if $directBackend }}
     {{- $paths := list }}
     {{- range $prefixes }}
@@ -124,6 +131,12 @@ spec:
     - host: {{ . | quote }}
       http:
         paths:
+          {{- if $voice }}
+          - path: /voice/rtc
+            pathType: Prefix
+            backend:
+              service: {name: {{ $name }}-backend, port: {number: 8080}}
+          {{- end }}
           {{- if $directBackend }}
           {{- range $prefixes }}
           - path: {{ . | quote }}

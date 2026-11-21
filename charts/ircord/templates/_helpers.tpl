@@ -59,6 +59,17 @@ imagePullSecrets:
 {{- end }}
 {{- end -}}
 
+{{- define "ircord.voiceCredentials" -}}
+{{- $credentials := .Values.voice.credentials -}}
+{{- $secret := required "voice.credentials.existingSecret is required with voice" $credentials.existingSecret -}}
+- name: IRCORD_VOICE_API_KEY
+  valueFrom:
+    secretKeyRef: {name: {{ $secret | quote }}, key: {{ $credentials.apiKey | quote }}}
+- name: IRCORD_VOICE_API_SECRET
+  valueFrom:
+    secretKeyRef: {name: {{ $secret | quote }}, key: {{ $credentials.secretKey | quote }}}
+{{- end -}}
+
 {{- define "ircord.moderationOperator" -}}
 {{- $operator := required "moderation.operator is required with moderation" .Values.moderation.operator -}}
 {{- if not (regexMatch "^[a-z0-9]+(-[a-z0-9]+)*$" $operator) -}}

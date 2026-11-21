@@ -23,7 +23,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-    networks: [application]
+    networks: [application, voice]
 
   frontend:
     image: ${IRCORD_FRONTEND_IMAGE:-ghcr.io/ircord/ircord-frontend:v0.7.3}
@@ -50,11 +50,40 @@ services:
       retries: 5
     networks: [application]
 
+  livekit:
+    profiles: [voice]
+    image: livekit/livekit-server@sha256:25cd902de7cacbd5f1f779f6a6ac1eae20ba8f56b0935934ce6b0ab80d1e3d20
+    restart: unless-stopped
+    env_file:
+      - path: ./voice.env
+        required: false
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        rtc:
+          udp_port: 7882
+          tcp_port: 0
+          use_external_ip: false
+          node_ip: ${IRCORD_VOICE_MEDIA_ADDRESS:-127.0.0.1}
+          enable_loopback_candidate: ${IRCORD_VOICE_LOOPBACK:-true}
+        room:
+          max_participants: 8
+        logging:
+          level: warn
+    ports:
+      - "${IRCORD_VOICE_BIND_ADDRESS:-127.0.0.1}:7882:7882/udp"
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [voice]
+
 networks:
   application:
     ipam:
       config:
         - subnet: ${IRCORD_NETWORK_SUBNET:-172.30.80.0/28}
+  voice:
 
 volumes:
   backend-data:
