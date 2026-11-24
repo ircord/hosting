@@ -86,3 +86,7 @@ imagePullSecrets:
     items:
       - {key: {{ .Values.moderation.passwordKey | quote }}, path: password}
 {{- end -}}
+
+{{- define "ircord.fileHostUrl" -}}
+{{- printf "%s/files/" (trimSuffix "/" (required "publicUrl is required with fileHost.enabled" .Values.publicUrl)) -}}
+{{- end -}}

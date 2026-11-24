@@ -230,3 +230,75 @@ the password when Ergo starts. You don't need to hash it. With
 yourself. `moderation.operator` sets the operator name. It uses lowercase
 letters, digits, and hyphens. After you change the password, restart the
 backend and Ergo.
+
+## Network file host
+
+An IRCord instance can act as the file host for its whole IRC network. People
+upload to `<publicUrl>/files/`, within the storage quota they already have on
+this instance. Other instances can hand the
+files their users post to this host, so viewers fetch them from here and not
+from the sending instance. IRC clients that support the IRCv3
+[FILEHOST draft](https://github.com/ircv3/ircv3-specifications/pull/562) can
+upload there too. The host checks every login against the associated Ergo
+server, so it requires one. It stays off until you enable it. It needs a
+backend release that includes the network file host. Older builds ignore the
+settings below, while Ergo still advertises the address.
+
+### On the instance that hosts the files
+
+With Helm, set `fileHost.enabled`:
+
+```sh
+helm upgrade ircord ./charts/ircord --namespace ircord --reuse-values \
+  --set fileHost.enabled=true
+```
+
+The chart sets `IRCORD_FILEHOST_SERVE=true` on the backend and, with the
+bundled Ergo configuration, advertises `<publicUrl>/files/` as both
+`draft/FILEHOST` and `soju.im/FILEHOST` through `server.additional-isupport`.
+The address uses `publicUrl`, so set it to the public HTTPS origin. Ergo applies
+the new configuration when it restarts, and the chart restarts it for you.
+
+With `ergo.existingConfigMap` or an external Ergo server, add the
+advertisement to that configuration, using your own public URL:
+
+```yaml
+server:
+  additional-isupport:
+    draft/FILEHOST: "https://chat.example.com/files/"
+    soju.im/FILEHOST: "https://chat.example.com/files/"
+```
+
+With Compose, set `IRCORD_FILEHOST_SERVE=true` in `backend.env` and add the
+same lines to your Ergo server. Compose does not run Ergo.
+
+Each upload counts against the uploader's account on this instance, so the
+uploader needs an account here. Who may upload is a backend setting. See the
+[backend configuration example](https://github.com/ircord/backend/blob/main/.env.example)
+for the current default and how to limit it to listed accounts. Set
+`backend.trustedProxies` so the host sees each uploader's address, because it
+counts failed logins per address. Keep `/files/` on your public
+host reachable without a sign-in page in front of it, because other instances
+and IRC clients send their own credentials.
+
+### On an instance that uses the host
+
+To store message uploads on the network's file host, set these backend
+settings. With Helm, put them under `backend.env` in your values. With Compose,
+put them in `backend.env` as `NAME=value` lines.
+
+```yaml
+backend:
+  env:
+    IRCORD_MESSAGE_UPLOADS: network
+    IRCORD_FILEHOST_TRUSTED_HOSTS: chat.example.com
+```
+
+The default is `local`. Message uploads use the network's host when it
+advertises one and its host name is trusted. The user's network login is sent
+only to trusted hosts, so list only the host you operate or trust. Profile
+pictures and theme backgrounds always stay on the instance. Uploads also stay
+on the instance when the network advertises no trusted host. A trusted host
+that isn't answering makes the upload fail instead of falling back. Set
+`local` again to restore uploads. This needs a backend release that includes
+the network file host.

@@ -133,6 +133,16 @@ moderation:
   existingSecret: ""
   passwordKey: password
 
+# Serve this instance's file host to the whole IRC network, at publicUrl + /files/.
+# Other instances on the network can then store the files their users post here,
+# and IRC clients that support the FILEHOST draft can upload, as the backend allows.
+# Needs a backend release with the network file host, and ergo.enabled
+# or an external Ergo server that checks the logins. With the bundled Ergo
+# configuration the chart advertises the address; with ergo.existingConfigMap or an
+# external server, add the advertisement yourself (see the README).
+fileHost:
+  enabled: false
+
 # The control and signaling port always stays on the private cluster network.
 voice:
   enabled: false
