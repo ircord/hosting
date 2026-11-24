@@ -44,4 +44,8 @@ jobs:
         run: |
           helm lint --strict charts/ircord -f examples/full-values.yaml \
             --set fileHost.enabled=true
+          rendered="$(helm template ircord ./charts/ircord -f examples/full-values.yaml --set fileHost.enabled=true)"
+          printf '%s\n' "$rendered" | grep -c 'draft/FILEHOST: "https://chat.example.com/files/"'
+          printf '%s\n' "$rendered" | grep -c 'soju.im/FILEHOST: "https://chat.example.com/files/"'
+          printf '%s\n' "$rendered" | grep -A1 'name: IRCORD_FILEHOST_SERVE' | grep -c 'value: "true"'
       - run: helm package charts/ircord --destination "$RUNNER_TEMP"

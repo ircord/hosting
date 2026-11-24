@@ -11,6 +11,9 @@
 {{- if not (has .Values.backend.fileStorage (list "local" "s3" "disabled")) }}
 {{- fail "backend.fileStorage must be local, s3, or disabled" }}
 {{- end }}
+{{- if and .Values.fileHost.enabled (eq .Values.backend.fileStorage "disabled") }}
+{{- fail "fileHost.enabled needs backend.fileStorage local or s3, because the host keeps the files it receives" }}
+{{- end }}
 {{- if .Values.ergo.enabled }}
 {{- $_ := set $backend "IRCORD_ERGO_SERVER" (printf "%s:%v" (required "ergo.hostname is required when Ergo is enabled" .Values.ergo.hostname) .Values.ergo.service.port) -}}
 {{- $_ := set $backend "IRCORD_ERGO_API_URL" (printf "https://%s-ergo-api:8089" $name) -}}

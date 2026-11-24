@@ -234,13 +234,15 @@ backend and Ergo.
 ## Network file host
 
 An IRCord instance can act as the file host for its whole IRC network. People
-with an account on the network upload to `<public url>/files/`, within the
-storage quota they already have on this instance. Other instances can hand the
+upload to `<publicUrl>/files/`, within the storage quota they already have on
+this instance. Other instances can hand the
 files their users post to this host, so viewers fetch them from here and not
 from the sending instance. IRC clients that support the IRCv3
 [FILEHOST draft](https://github.com/ircv3/ircv3-specifications/pull/562) can
 upload there too. The host checks every login against the associated Ergo
-server, so it requires one. It stays off until you enable it.
+server, so it requires one. It stays off until you enable it. It needs a
+backend release that includes the network file host. Older builds ignore the
+settings below, while Ergo still advertises the address.
 
 ### On the instance that hosts the files
 
@@ -270,8 +272,12 @@ server:
 With Compose, set `IRCORD_FILEHOST_SERVE=true` in `backend.env` and add the
 same lines to your Ergo server. Compose does not run Ergo.
 
-Anyone who can sign in to the network can use the host, so each upload counts
-against that person's account on this instance. Keep `/files/` on your public
+Each upload counts against the uploader's account on this instance, so the
+uploader needs an account here. Who may upload is a backend setting. See the
+[backend configuration example](https://github.com/ircord/backend/blob/main/.env.example)
+for the current default and how to limit it to listed accounts. Set
+`backend.trustedProxies` so the host sees each uploader's address, because it
+counts failed logins per address. Keep `/files/` on your public
 host reachable without a sign-in page in front of it, because other instances
 and IRC clients send their own credentials.
 
@@ -291,4 +297,8 @@ backend:
 The default is `local`. Message uploads use the network's host when it
 advertises one and its host name is trusted. The user's network login is sent
 only to trusted hosts, so list only the host you operate or trust. Profile
-pictures and theme backgrounds always stay on the instance.
+pictures and theme backgrounds always stay on the instance. Uploads also stay
+on the instance when the network advertises no trusted host. A trusted host
+that isn't answering makes the upload fail instead of falling back. Set
+`local` again to restore uploads. This needs a backend release that includes
+the network file host.
