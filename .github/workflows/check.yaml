@@ -40,4 +40,8 @@ jobs:
         run: |
           helm lint --strict charts/ircord -f examples/full-values.yaml \
             --set moderation.enabled=true --set moderation.existingSecret=ircord-moderation
+      - name: Check the network file host
+        run: |
+          helm lint --strict charts/ircord -f examples/full-values.yaml \
+            --set fileHost.enabled=true
       - run: helm package charts/ircord --destination "$RUNNER_TEMP"

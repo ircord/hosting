@@ -24,6 +24,9 @@
 {{- $_ := set $backend "IRCORD_ERGO_MODERATION_OPERATOR" (include "ircord.moderationOperator" .) -}}
 {{- $_ := set $backend "IRCORD_ERGO_MODERATION_PASSWORD_FILE" "/etc/ircord/moderation/password" -}}
 {{- end }}
+{{- if .Values.fileHost.enabled }}
+{{- $_ := set $backend "IRCORD_FILEHOST_SERVE" "true" -}}
+{{- end }}
 {{- if and .Values.voice.enabled .Values.voice.channels }}
 {{- $_ := set $backend "IRCORD_VOICE_URL" (printf "http://%s-livekit:7880" $name) -}}
 {{- $_ := set $backend "IRCORD_VOICE_CHANNELS" (join "," .Values.voice.channels) -}}

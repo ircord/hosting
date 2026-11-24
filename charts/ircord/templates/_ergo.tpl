@@ -10,6 +10,11 @@ server:
       tls: {cert: /tls/tls.crt, key: /tls/tls.key}
   max-sendq: 96k
   enforce-utf8: true
+{{- if .Values.fileHost.enabled }}
+  additional-isupport:
+    draft/FILEHOST: {{ include "ircord.fileHostUrl" . | quote }}
+    soju.im/FILEHOST: {{ include "ircord.fileHostUrl" . | quote }}
+{{- end }}
   ip-cloaking:
     enabled: true
     netname: ircord
