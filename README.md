@@ -139,8 +139,8 @@ helm template ircord ./charts/ircord -f ./examples/full-values.yaml
 
 ## Voice channels
 
-Voice requires compatible backend and frontend builds and an associated Ergo server.
-Configure one or more existing channels before allowing members to join voice.
+Voice requires compatible backend and frontend builds. Server owners can create voice channels
+that all signed-in accounts on the IRCord server can join.
 
 With Helm, set `voice.enabled` and reference a Secret in `voice.credentials.existingSecret`.
 The Secret must contain `IRCORD_VOICE_API_KEY` and `IRCORD_VOICE_API_SECRET`.
@@ -148,14 +148,17 @@ Use a random API secret of at least 32 characters.
 The chart restricts LiveKit signaling and administration to backend pods.
 With `voice.channels` empty and `voice.media.enabled` off, only the private service runs.
 
-To enable rooms, list their lowercase channel names in `voice.channels`.
+To seed rooms when the backend first creates its catalog, list the initial names in
+`voice.channels` using the lowercase `#channel` format. Create, edit, and remove rooms in
+IRCord after startup. Existing IRC-linked rooms migrate to server-wide voice channels.
 Set `voice.media.enabled` and set `voice.media.address` to the IP clients can reach on UDP port 7882.
 Forward that port to the media load balancer if your router uses network address translation.
 Clients use the existing IRCord HTTPS host for signaling and WebRTC for audio.
 Exclude signaling query strings from reverse proxy logs because they contain room credentials.
 
 With Compose, put the same key and secret in `backend.env` using the names above.
-Set `IRCORD_VOICE_URL=http://livekit:7880` and set `IRCORD_VOICE_CHANNELS` to a comma-separated list.
+Set `IRCORD_VOICE_URL=http://livekit:7880`. Optionally set `IRCORD_VOICE_CHANNELS` to a
+comma-separated list of channels to import when the backend first creates its catalog.
 Set `LIVEKIT_KEYS` in `voice.env` to a mapping in the form `api-key: api-secret`.
 Start with `docker compose --profile voice up -d --wait`.
 The default bind and advertised media address are loopback for local testing.

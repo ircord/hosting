@@ -30,7 +30,7 @@ spec:
 {{- $hosts := concat (list $host) $config.aliases }}
 {{- $service := printf "%s-%s" $name $route.component }}
 {{- $directBackend := and (eq $routeName "app") $config.directBackend }}
-{{- $voice := and (eq $routeName "app") $root.Values.voice.enabled $root.Values.voice.channels }}
+{{- $voice := and (eq $routeName "app") $root.Values.voice.enabled $root.Values.voice.media.enabled }}
 {{- if $ingress.certificates.issuerRef }}
 ---
 apiVersion: cert-manager.io/v1

@@ -136,6 +136,7 @@ moderation:
 # The control and signaling port always stays on the private cluster network.
 voice:
   enabled: false
+  # Optional room names in lowercase #channel format to seed a new voice catalog.
   channels: []
   image:
     repository: livekit/livekit-server
